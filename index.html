@@ -1720,7 +1720,7 @@ function verifyAndLoad(token) {
 function loadSheetData() {
   gapi.client.sheets.spreadsheets.values.get({
     spreadsheetId: SHEET_ID,
-    range: 'Res, Desembolsos'
+    range: 'Desembolsos'
   }).then(function(resp) {
     var values = resp.result.values;
     if (!values || values.length === 0) {
