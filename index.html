@@ -1739,9 +1739,24 @@ async function verifyAndLoad() {
 // ============================================================
 async function loadSheetData() {
   try {
+    // Try by gid first, fallback to name
+    // Get sheet metadata to find tab name by gid
+    const meta = await gapi.client.sheets.spreadsheets.get({
+      spreadsheetId: SHEET_ID,
+      fields: 'sheets.properties'
+    });
+    
+    const sheets = meta.result.sheets || [];
+    let tabName = 'Res, Desembolsos';
+    sheets.forEach(s => {
+      if (s.properties.sheetId === 978839474) {
+        tabName = s.properties.title;
+      }
+    });
+
     const response = await gapi.client.sheets.spreadsheets.values.get({
       spreadsheetId: SHEET_ID,
-      range: 'Res, Desembolsos',
+      range: tabName,
     });
 
     const values = response.result.values;
