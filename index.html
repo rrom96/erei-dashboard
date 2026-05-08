@@ -1662,467 +1662,127 @@ function switchSection(name) {
 <script src="https://apis.google.com/js/api.js"></script>
 <script src="https://accounts.google.com/gsi/client"></script>
 <script>
-// ============================================================
-// CONFIG
-// ============================================================
 const CLIENT_ID = '629893309314-r097finu66ijrkmqs6jeao40rm72fc0s.apps.googleusercontent.com';
 const SHEET_ID  = '1_6qOt-LLa6KL1N2NpHgC6wdMdXpWBUzl-uFuLGKF2TY';
 const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly';
-const ALLOWED_EMAILS = ['rrmerlo@grupovesta.net'];
+const ALLOWED   = ['rrmerlo@grupovesta.net'];
 
 let tokenClient = null;
-let gapiInited  = false;
-let gisInited   = false;
-let accessToken = null;
+let gapiReady   = false;
+let gisReady    = false;
 
-// ============================================================
-// INIT — wait for both GAPI and GIS
-// ============================================================
-function gapiLoaded() {
-  gapi.load('client', async () => {
-    await gapi.client.init({});
-    await gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
-    gapiInited = true;
-    maybeEnableLogin();
+window.addEventListener('load', function() {
+  gapi.load('client', function() {
+    gapi.client.init({}).then(function() {
+      return gapi.client.load('https://sheets.googleapis.com/$discovery/rest?version=v4');
+    }).then(function() {
+      gapiReady = true;
+    });
   });
-}
 
-function gisLoaded() {
   tokenClient = google.accounts.oauth2.initTokenClient({
     client_id: CLIENT_ID,
     scope: SCOPES,
-    callback: async (resp) => {
+    callback: function(resp) {
       if (resp.error) { showAuthError('Error: ' + resp.error); return; }
-      accessToken = resp.access_token;
-      gapi.client.setToken({ access_token: accessToken });
-      await verifyAndLoad();
-    },
+      gapi.client.setToken({ access_token: resp.access_token });
+      verifyAndLoad(resp.access_token);
+    }
   });
-  gisInited = true;
-  maybeEnableLogin();
-}
-
-function maybeEnableLogin() {
-  if (gapiInited && gisInited) {
-    // Ready — button already visible
-  }
-}
+  gisReady = true;
+});
 
 function handleLogin() {
-  if (!tokenClient) { showAuthError('Cargando... intentá de nuevo.'); return; }
   tokenClient.requestAccessToken({ prompt: 'consent' });
 }
 
-async function verifyAndLoad() {
-  try {
-    const resp = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + accessToken);
-    const info = await resp.json();
-    const email = info.email || '';
-    if (email && !ALLOWED_EMAILS.includes(email)) {
-      showAuthError('Acceso denegado: ' + email + ' no está autorizado.');
-      google.accounts.oauth2.revoke(accessToken);
-      accessToken = null;
-      return;
-    }
-    hideAuthOverlay();
-    showLoading();
-    await loadSheetData();
-  } catch(e) {
-    hideAuthOverlay();
-    showLoading();
-    await loadSheetData();
-  }
+function verifyAndLoad(token) {
+  fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + token)
+    .then(function(r) { return r.json(); })
+    .then(function(info) {
+      var email = info.email || '';
+      if (email && ALLOWED.indexOf(email) === -1) {
+        showAuthError('Acceso denegado: ' + email);
+        google.accounts.oauth2.revoke(token);
+        return;
+      }
+      hideAuthOverlay();
+      showLoading();
+      loadSheetData();
+    })
+    .catch(function() {
+      hideAuthOverlay();
+      showLoading();
+      loadSheetData();
+    });
 }
 
-// ============================================================
-// LOAD SHEET DATA via GAPI client (token already set)
-// ============================================================
-async function loadSheetData() {
-  try {
-    // Try by gid first, fallback to name
-    // Get sheet metadata to find tab name by gid
-    const meta = await gapi.client.sheets.spreadsheets.get({
-      spreadsheetId: SHEET_ID,
-      fields: 'sheets.properties'
-    });
-    
-    const sheets = meta.result.sheets || [];
-    let tabName = 'Res, Desembolsos';
-    sheets.forEach(s => {
-      if (s.properties.sheetId === 978839474) {
-        tabName = s.properties.title;
-      }
-    });
-
-    const response = await gapi.client.sheets.spreadsheets.values.get({
-      spreadsheetId: SHEET_ID,
-      range: tabName,
-    });
-
-    const values = response.result.values;
+function loadSheetData() {
+  gapi.client.sheets.spreadsheets.values.get({
+    spreadsheetId: SHEET_ID,
+    range: 'Res, Desembolsos'
+  }).then(function(resp) {
+    var values = resp.result.values;
     if (!values || values.length === 0) {
       hideLoading();
-      alert('No se encontraron datos en el Sheet.');
+      alert('No se encontraron datos.');
       return;
     }
-
     parseSheetData(values);
     hideLoading();
     updateUserPill();
     renderAll();
-
-  } catch(e) {
+  }).catch(function(err) {
     hideLoading();
-    const msg = e.result ? e.result.error.message : e.message;
+    var msg = (err.result && err.result.error) ? err.result.error.message : JSON.stringify(err);
     alert('Error al leer el Sheet: ' + msg);
-  }
+  });
 }
 
 function showAuthError(msg) {
-  document.getElementById('auth-error').textContent = msg;
+  var el = document.getElementById('auth-error');
+  if (el) el.textContent = msg;
 }
 
 function hideAuthOverlay() {
-  document.getElementById('auth-overlay').style.display = 'none';
+  var el = document.getElementById('auth-overlay');
+  if (el) el.style.display = 'none';
 }
 
 function showLoading() {
-  document.getElementById('loading-overlay').style.display = 'flex';
+  var el = document.getElementById('loading-overlay');
+  if (el) el.style.display = 'flex';
 }
 
 function hideLoading() {
-  document.getElementById('loading-overlay').style.display = 'none';
+  var el = document.getElementById('loading-overlay');
+  if (el) el.style.display = 'none';
 }
 
 function handleLogout() {
-  if (accessToken) { google.accounts.oauth2.revoke(accessToken); }
-  accessToken = null;
+  gapi.client.setToken(null);
   location.reload();
 }
 
 function updateUserPill() {
-  const topbarRight = document.querySelector('.topbar-right');
+  var topbarRight = document.querySelector('.topbar-right');
   if (!topbarRight) return;
-  const email = ALLOWED_EMAILS[0];
-  const pill = document.createElement('div');
+  var pill = document.createElement('div');
   pill.className = 'user-pill';
-  pill.innerHTML = \`<div class="user-avatar">\${email[0].toUpperCase()}</div>
-    <span class="user-email">\${email}</span>
-    <button class="logout-btn" onclick="handleLogout()">Salir</button>\`;
-  const syncBadge = document.createElement('div');
+  pill.innerHTML = '<div class="user-avatar">R</div><span class="user-email">rrmerlo@grupovesta.net</span><button class="logout-btn" onclick="handleLogout()">Salir</button>';
+  var syncBadge = document.createElement('div');
   syncBadge.className = 'live-badge';
   syncBadge.innerHTML = '<div class="live-dot"></div> En vivo';
-  const connectBtn = topbarRight.querySelector('.btn-primary');
+  var connectBtn = topbarRight.querySelector('.btn-primary');
   if (connectBtn) connectBtn.replaceWith(syncBadge);
   topbarRight.insertBefore(pill, topbarRight.firstChild);
 }
 
 function renderAll() {
   renderDesembolsos();
-  if (document.getElementById('chart-inversion')) renderChartInversion();
+  var ctx = document.getElementById('chart-inversion');
+  if (ctx) renderChartInversion();
 }
-
-// ============================================================
-// INIT on load
-// ============================================================
-window.addEventListener('load', () => {
-  gapiLoaded();
-  gisLoaded();
-});
 </script>
-
-
-<!-- AUTH OVERLAY -->
-<div class="auth-overlay" id="auth-overlay">
-  <div class="auth-card">
-    <div class="auth-logo">ÉREI</div>
-    <div class="auth-tagline">Programa de Inversión · TGU 2026</div>
-    <div class="auth-desc">
-      Conectá tu cuenta de Google para cargar los datos en vivo desde el Sheet de seguimiento.
-    </div>
-    <button class="auth-btn" onclick="handleLogin()">
-      <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.2l6.8-6.8C35.8 2.2 30.2 0 24 0 14.6 0 6.5 5.4 2.6 13.3l7.9 6.1C12.4 13.1 17.8 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v8.5h12.7c-.6 3-2.3 5.5-4.8 7.2l7.5 5.8c4.4-4.1 6.9-10.1 7.1-17z"/><path fill="#FBBC05" d="M10.5 28.6A14.5 14.5 0 0 1 9.5 24c0-1.6.3-3.1.8-4.6l-7.9-6.1A23.9 23.9 0 0 0 0 24c0 3.9.9 7.5 2.6 10.7l7.9-6.1z"/><path fill="#34A853" d="M24 48c6.2 0 11.4-2 15.2-5.5l-7.5-5.8c-2.1 1.4-4.7 2.2-7.7 2.2-6.2 0-11.5-4.2-13.4-9.9l-7.9 6.1C6.5 42.6 14.6 48 24 48z"/></svg>
-      Continuar con Google
-    </button>
-    <div class="auth-error" id="auth-error"></div>
-    <div class="auth-security">
-      <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1L2 3v3c0 2.5 1.8 4.7 4 5.5C8.2 10.7 10 8.5 10 6V3L6 1z"/></svg>
-      Acceso seguro · Solo lectura al Sheet · Datos no se almacenan
-    </div>
-  </div>
-</div>
-
-<!-- LOADING OVERLAY -->
-<div class="loading-overlay" id="loading-overlay">
-  <div class="loading-spinner"></div>
-  <div class="loading-text">Cargando datos del Sheet...</div>
-</div>
-
-<script src="https://accounts.google.com/gsi/client"></script>
-<script>
-// ============================================================
-// OAUTH CONFIG
-// ============================================================
-const CLIENT_ID = '629893309314-r097finu66ijrkmqs6jeao40rm72fc0s.apps.googleusercontent.com';
-const SHEET_ID  = '1_6qOt-LLa6KL1N2NpHgC6wdMdXpWBUzl-uFuLGKF2TY';
-const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly';
-const SHEET_DESEMBOLSOS = 'Res%2C%20Desembolsos';
-
-let tokenClient = null;
-let accessToken = null;
-
-function initOAuth() {
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: SCOPES,
-    callback: (resp) => {
-      if (resp.error) {
-        showAuthError('Error de autenticación: ' + resp.error);
-        return;
-      }
-      accessToken = resp.access_token;
-      // Validate user email
-      validateUser(resp.access_token);
-    },
-  });
-}
-
-
-async function validateUser(token) {
-  const ALLOWED_EMAILS = ['rrmerlo@grupovesta.net'];
-  try {
-    // Use tokeninfo endpoint which is more reliable for email
-    const resp = await fetch('https://www.googleapis.com/oauth2/v3/tokeninfo?access_token=' + token);
-    const info = await resp.json();
-    const email = info.email || info.hd || '';
-    
-    if (!email) {
-      // Can't verify email, allow if token is valid and proceed
-      // Can't verify email, proceed anyway if token is valid
-      hideAuthOverlay();
-      showLoading();
-      loadSheetData();
-      return;
-    }
-    
-    if (!ALLOWED_EMAILS.includes(email)) {
-      document.getElementById('auth-overlay').style.display = 'flex';
-      showAuthError('Acceso denegado. Tu correo (' + email + ') no está autorizado.');
-      google.accounts.oauth2.revoke(token);
-      return;
-    }
-    hideAuthOverlay();
-    showLoading();
-    loadSheetData();
-  } catch(e) {
-    // On error, still try to load - token was valid from Google
-    hideAuthOverlay();
-    showLoading();
-    loadSheetData();
-  }
-}
-
-function handleLogin() {
-  if (!tokenClient) { showAuthError('El cliente OAuth no está listo. Recargá la página.'); return; }
-  tokenClient.requestAccessToken({ prompt: 'consent' });
-}
-
-function showAuthError(msg) {
-  document.getElementById('auth-error').textContent = msg;
-}
-
-function hideAuthOverlay() {
-  document.getElementById('auth-overlay').style.display = 'none';
-}
-
-function showLoading() {
-  const el = document.getElementById('loading-overlay');
-  el.style.display = 'flex';
-}
-
-function hideLoading() {
-  const el = document.getElementById('loading-overlay');
-  el.style.display = 'none';
-}
-
-// ============================================================
-// LOAD SHEET DATA
-// ============================================================
-async function loadSheetData() {
-  try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/$1_6qOt-LLa6KL1N2NpHgC6wdMdXpWBUzl-uFuLGKF2TY/values/Res%2C%20Desembolsos!A1:M50`;
-    const resp = await fetch(url, {
-      headers: { Authorization: 'Bearer ' + accessToken }
-    });
-    const data = await resp.json();
-
-    if (data.error) {
-      hideLoading();
-      alert('Error al leer el Sheet: ' + data.error.message);
-      return;
-    }
-
-    parseSheetData(data.values);
-    hideLoading();
-    updateUserPill();
-    renderAll();
-
-  } catch(e) {
-    hideLoading();
-    alert('Error de conexión: ' + e.message);
-  }
-}
-
-function parseSheetData(rows) {
-  if (!rows || rows.length < 7) return;
-
-  // Find header row dynamically by looking for 'PROYECTO' keyword
-  let headerIdx = 0;
-  rows.forEach((row, i) => {
-    if (row.some(cell => cell && cell.toString().toUpperCase().includes('PROYECTO'))) {
-      headerIdx = i;
-    }
-  });
-  const headers = rows[headerIdx] || [];
-  const dataRows = rows.slice(headerIdx + 1);
-
-  const newData = [];
-  let currentSprint = '';
-
-  dataRows.forEach(row => {
-    const proyecto = row[1];
-    const desc     = row[2];
-    const fechaRaw = row[3];
-    const monto    = parseFloat((row[4] || '0').toString().replace(/[$,]/g,'')) || 0;
-    const estadoPago = row[5] || '';
-    const sprint   = row[7] || currentSprint;
-    const obs      = row[8] || '';
-    const avanceObra = row[9] || null;
-
-    if (!proyecto || proyecto === 'PROYECTO') return;
-    if (sprint) currentSprint = sprint;
-
-    // Parse date
-    let fecha = '2026-01-01';
-    if (fechaRaw) {
-      if (fechaRaw.includes('-')) fecha = fechaRaw.slice(0, 10);
-      else if (fechaRaw.includes('/')) {
-        const parts = fechaRaw.split('/');
-        fecha = `${parts[2]}-${parts[1].padStart(2,'0')}-${parts[0].padStart(2,'0')}`;
-      }
-    }
-
-    newData.push({ proyecto, desc, fecha, monto, estadoPago, avanceObra, sprint: currentSprint, obs });
-  });
-
-  if (newData.length > 0) {
-    window.DESEMBOLSOS = newData;
-    updateProyectoTotals();
-    updateMetrics();
-  }
-}
-
-function updateProyectoTotals() {
-  const totals = {};
-  window.DESEMBOLSOS.forEach(d => {
-    const p = d.proyecto;
-    if (!totals[p]) totals[p] = { total: 0, desembolsado: 0 };
-    totals[p].total += d.monto;
-    if (d.estadoPago === 'Aprobado') totals[p].desembolsado += d.monto;
-  });
-
-  window.PROYECTOS.forEach(p => {
-    const key = Object.keys(totals).find(k => k.toUpperCase().includes(p.nombre.toUpperCase().split(' ')[0]));
-    if (key) {
-      p.desembolsado = totals[key].desembolsado;
-    }
-  });
-}
-
-function updateMetrics() {
-  const totalDesembolsado = window.DESEMBOLSOS
-    .filter(d => d.estadoPago === 'Aprobado')
-    .reduce((s, d) => s + d.monto, 0);
-
-  const obraCompletada = window.DESEMBOLSOS
-    .filter(d => d.avanceObra === 'Completado').length;
-
-  const totalItems = window.DESEMBOLSOS.length;
-  const pct = Math.round(totalDesembolsado / 411322 * 100);
-  const obraPct = Math.round(obraCompletada / totalItems * 100);
-
-  // Update metric cards if visible
-  const cards = document.querySelectorAll('.metric-value');
-  if (cards.length > 0) {
-    cards[1].textContent = '$' + Math.round(totalDesembolsado/1000) + 'K';
-    cards[3].textContent = obraCompletada + ' / ' + totalItems;
-  }
-
-  // Update progress bars
-  updateProgressBars(pct, obraPct, totalDesembolsado);
-}
-
-function updateProgressBars(pct, obraPct, totalDesembolsado) {
-  const bars = document.querySelectorAll('.dual-bar-fill');
-  if (bars.length >= 2) {
-    bars[0].style.width = pct + '%';
-    bars[1].style.width = obraPct + '%';
-  }
-  const pcts = document.querySelectorAll('.dual-bar-pct');
-  if (pcts.length >= 2) {
-    pcts[0].textContent = pct + '%';
-    pcts[1].textContent = obraPct + '%';
-  }
-  const amounts = document.querySelectorAll('.dual-bar-amount');
-  if (amounts.length >= 1) {
-    amounts[0].textContent = '$' + Math.round(totalDesembolsado/1000) + 'K / $411K';
-  }
-}
-
-function updateUserPill() {
-  const topbarRight = document.querySelector('.topbar-right');
-  if (!topbarRight) return;
-
-  const email = 'rrmerlo@grupovesta.net';
-  const initial = email[0].toUpperCase();
-
-  const pill = document.createElement('div');
-  pill.className = 'user-pill';
-  pill.innerHTML = `
-    <div class="user-avatar">${initial}</div>
-    <span class="user-email">${email}</span>
-    <button class="logout-btn" onclick="handleLogout()">Salir</button>
-  `;
-
-  const syncBtn = document.createElement('div');
-  syncBtn.className = 'live-badge';
-  syncBtn.innerHTML = '<div class="live-dot"></div> En vivo';
-
-  // Replace connect button
-  const connectBtn = topbarRight.querySelector('.btn-primary');
-  if (connectBtn) connectBtn.replaceWith(syncBtn);
-  topbarRight.insertBefore(pill, topbarRight.firstChild);
-}
-
-function handleLogout() {
-  if (accessToken) google.accounts.oauth2.revoke(accessToken);
-  accessToken = null;
-  location.reload();
-}
-
-function renderAll() {
-  renderDesembolsos();
-  if (document.getElementById('chart-inversion')) renderChartInversion();
-}
-
-// ============================================================
-// INIT WITH OAUTH
-// ============================================================
-window.addEventListener('load', () => {
-  google.accounts.id.initialize({ client_id: CLIENT_ID });
-  initOAuth();
-});
-</script>
-
 </body>
 </html>
