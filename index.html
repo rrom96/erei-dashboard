@@ -1699,6 +1699,7 @@ async function validateUser(token) {
     
     if (!email) {
       // Can't verify email, allow if token is valid and proceed
+      // Can't verify email, proceed anyway if token is valid
       hideAuthOverlay();
       showLoading();
       loadSheetData();
