@@ -911,9 +911,7 @@
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 1v7M3 5l3 3 3-3M1 10h10"/></svg>
           Exportar notas
         </button>
-        <button class="btn btn-primary" onclick="alert('Para conectar con Google Sheets en vivo, configurá tu Client ID OAuth. Ver instrucciones en la documentación.')">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 3L3 9M3 3h6v6"/></svg>
-          Conectar Sheet
+        <button class="btn btn-primary" style="display:none;">Conectar Sheet
         </button>
       </div>
     </div>
@@ -1667,7 +1665,7 @@ function switchSection(name) {
 // OAUTH CONFIG
 // ============================================================
 const CLIENT_ID = '629893309314-r097finu66ijrkmqs6jeao40rm72fc0s.apps.googleusercontent.com';
-const SHEET_ID  = '1-CQxmmeyOpr0RzzOCPCSC09YfkIR1ia1';
+const SHEET_ID  = '1_6qOt-LLa6KL1N2NpHgC6wdMdXpWBUzl-uFuLGKF2TY';
 const SCOPES    = 'https://www.googleapis.com/auth/spreadsheets.readonly';
 const SHEET_DESEMBOLSOS = 'Res%2C%20Desembolsos';
 
@@ -1740,7 +1738,7 @@ function hideLoading() {
 // ============================================================
 async function loadSheetData() {
   try {
-    const url = `https://sheets.googleapis.com/v4/spreadsheets/$1-CQxmmeyOpr0RzzOCPCSC09YfkIR1ia1/values/Res%2C%20Desembolsos!A1:M50`;
+    const url = `https://sheets.googleapis.com/v4/spreadsheets/$1_6qOt-LLa6KL1N2NpHgC6wdMdXpWBUzl-uFuLGKF2TY/values/Res%2C%20Desembolsos!A1:M50`;
     const resp = await fetch(url, {
       headers: { Authorization: 'Bearer ' + accessToken }
     });
