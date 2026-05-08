@@ -1776,9 +1776,15 @@ async function loadSheetData() {
 function parseSheetData(rows) {
   if (!rows || rows.length < 7) return;
 
-  // Find header row (row index 8 = row 9 in sheet)
-  const headers = rows[8] || [];
-  const dataRows = rows.slice(9);
+  // Find header row dynamically by looking for 'PROYECTO' keyword
+  let headerIdx = 0;
+  rows.forEach((row, i) => {
+    if (row.some(cell => cell && cell.toString().toUpperCase().includes('PROYECTO'))) {
+      headerIdx = i;
+    }
+  });
+  const headers = rows[headerIdx] || [];
+  const dataRows = rows.slice(headerIdx + 1);
 
   const newData = [];
   let currentSprint = '';
