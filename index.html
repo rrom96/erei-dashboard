@@ -1684,11 +1684,32 @@ function initOAuth() {
         return;
       }
       accessToken = resp.access_token;
-      hideAuthOverlay();
-      showLoading();
-      loadSheetData();
+      // Validate user email
+      validateUser(resp.access_token);
     },
   });
+}
+
+
+async function validateUser(token) {
+  const ALLOWED_EMAILS = ['rrmerlo@grupovesta.net'];
+  try {
+    const resp = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: 'Bearer ' + token }
+    });
+    const info = await resp.json();
+    if (!ALLOWED_EMAILS.includes(info.email)) {
+      document.getElementById('auth-overlay').style.display = 'flex';
+      showAuthError('Acceso denegado. Tu correo (' + info.email + ') no está autorizado.');
+      google.accounts.oauth2.revoke(token);
+      return;
+    }
+    hideAuthOverlay();
+    showLoading();
+    loadSheetData();
+  } catch(e) {
+    showAuthError('Error verificando usuario: ' + e.message);
+  }
 }
 
 function handleLogin() {
