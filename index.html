@@ -1776,9 +1776,9 @@ async function loadSheetData() {
 function parseSheetData(rows) {
   if (!rows || rows.length < 7) return;
 
-  // Find header row (row index 5 = row 6 in sheet)
-  const headers = rows[5] || [];
-  const dataRows = rows.slice(6);
+  // Find header row (row index 8 = row 9 in sheet)
+  const headers = rows[8] || [];
+  const dataRows = rows.slice(9);
 
   const newData = [];
   let currentSprint = '';
