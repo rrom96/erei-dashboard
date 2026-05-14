@@ -222,8 +222,7 @@ body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--t
         <div style="overflow-x:auto">
           <table class="tbl">
             <thead><tr>
-              <th>Proyecto</th><th>Descripción</th><th>Fecha</th>
-              <th class="tr">Monto</th><th>Estado Pago</th><th>Avance Obra</th><th>Sprint</th>
+              <th>Proyecto</th><th>Descripción</th><th>Fecha</th><th class="tr">Monto</th><th class="tr">Variación</th><th>Estado Pago</th><th>Avance Obra</th><th>Sprint</th>
             </tr></thead>
             <tbody id="tbl-des"></tbody>
           </table>
@@ -335,7 +334,12 @@ function parseCSV(text) {
   return result;
 }
 
-function cleanNum(v) { return parseFloat((v||'').replace(/[$,]/g,'').replace(/[^\d.-]/g,'')) || 0; }
+function cleanNum(v) {
+  if (!v) return 0;
+  var s = v.toString().replace(/"/g,'').replace(/\$/g,'').replace(/,/g,'').trim();
+  var n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
+}
 function fmtUSD(n) { return '$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtK(n) { return n>=1000?'$'+(n/1000).toFixed(1)+'K':'$'+Math.round(n); }
 function fmtDate(d) { if(!d) return ''; try{ var dt=new Date(d+'T12:00:00'); return dt.toLocaleDateString('es-HN',{day:'numeric',month:'short'}); } catch(e){return d;} }
@@ -394,28 +398,45 @@ async function loadAll() {
   }
 }
 
+var metaDes = {invAprobada:0, filtroInv:0, pctEjecucion:'', fechaFin:''};
+
 function parseDesembolsos(text) {
   var rows = parseCSV(text);
   desData = [];
+
+  // Read header metadata
+  // Row 6 (index 5): D=invAprobada, E=filtroInv, F=pctEjecucion
+  // Row 3 (index 2): H=fechaInicio; Row 6 (index 5): H=fechaFin
+  for (var i = 0; i < Math.min(rows.length, 8); i++) {
+    var r = rows[i];
+    if (r[3] && cleanNum(r[3]) > 0) metaDes.invAprobada = cleanNum(r[3]);
+    if (r[4] && cleanNum(r[4]) > 0) metaDes.filtroInv   = cleanNum(r[4]);
+    if (r[5] && r[5].toString().includes('%')) metaDes.pctEjecucion = r[5].toString().trim();
+    if (r[7] && r[7].toString().includes('2026')) metaDes.fechaFin = r[7].toString().trim();
+  }
+
   var headerRow = -1;
   for (var i = 0; i < rows.length; i++) {
     if (rows[i][1] && rows[i][1].toString().toUpperCase().includes('PROYECTO')) { headerRow = i; break; }
   }
   if (headerRow < 0) return;
+
   for (var i = headerRow+1; i < rows.length; i++) {
     var r = rows[i];
     var proyecto = r[1] ? r[1].trim() : '';
     if (!proyecto || proyecto.toUpperCase() === 'TOTAL') continue;
     desData.push({
-      proyecto:   proyecto,
-      desc:       r[2] || '',
-      fecha:      r[3] || '',
-      monto:      cleanNum(r[4]),
-      estadoPago: r[5] || '',
-      sprint:     r[7] || '',
-      obs:        r[8] || '',
-      avanceObra: r[9] || '',
-      comentario: r[10] || ''
+      proyecto:    proyecto,
+      desc:        r[2] || '',
+      fecha:       r[3] || '',
+      monto:       cleanNum(r[4]),
+      variacion:   cleanNum(r[5]),
+      estadoPago:  r[6] || '',
+      responsable: r[7] || '',
+      sprint:      r[8] || '',
+      obs:         r[9] || '',
+      avanceObra:  r[10] || '',
+      comentario:  r[11] || ''
     });
   }
 }
@@ -454,7 +475,7 @@ function recalcProyectos() {
     var p = d.proyecto;
     if (!totals[p]) totals[p] = {t:0,d:0};
     if (d.monto > 0) totals[p].t += d.monto;
-    if (d.estadoPago === 'Aprobado') totals[p].d += d.monto;
+    if (d.estadoPago && d.estadoPago.trim() === 'Aprobado') totals[p].d += d.monto;
   });
   PROYECTOS.forEach(function(p) {
     var key = Object.keys(totals).find(function(k) {
@@ -483,19 +504,21 @@ function renderAll() {
 }
 
 function renderMetrics() {
-  var totalInv = PROYECTOS.reduce(function(s,p){return s+p.t;},0);
-  var totalDes = desData.filter(function(d){return d.estadoPago==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
+  // Use invAprobada from sheet header if available
+  var totalInv = metaDes.invAprobada > 0 ? metaDes.invAprobada : desData.reduce(function(s,d){return s+d.monto;},0);
+  var totalDes = desData.filter(function(d){return d.estadoPago && d.estadoPago.trim()==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
   var obraComp = desData.filter(function(d){return d.avanceObra==='Completado';}).length;
-  var enEspera = desData.filter(function(d){return d.estadoPago==='En espera';});
+  var enEspera = desData.filter(function(d){return d.estadoPago && d.estadoPago.trim()==='En espera';});
   var proxMonto = enEspera.reduce(function(s,d){return s+d.monto;},0);
   var pct = totalInv>0 ? Math.round(totalDes/totalInv*100) : 0;
+  var fechaFin = metaDes.fechaFin || 'Jun 30';
 
   var ms = [
-    {lbl:'Inversión Total',val:fmtK(totalInv),sub:'Programa completo',pct:100,cls:'m-accent',col:'var(--accent)'},
-    {lbl:'Desembolsado',val:fmtK(totalDes),sub:pct+'% del programa',pct:pct,cls:'m-green',col:'var(--green)'},
-    {lbl:'En Espera',val:fmtK(proxMonto),sub:enEspera.length+' pagos pendientes',pct:Math.round(proxMonto/totalInv*100),cls:'m-amber',col:'var(--amber)'},
-    {lbl:'Obra Completada',val:obraComp+'/'+desData.length,sub:'desembolsos con obra OK',pct:Math.round(obraComp/desData.length*100),cls:'m-purple',col:'var(--jj)'},
-    {lbl:'Apertura Estimada',val:'May 24',sub:'RAVA · Jujutsu',pct:75,cls:'m-green',col:'var(--green)'}
+    {lbl:'Inversión Aprobada',val:fmtK(totalInv),sub:'Presupuesto del programa',pct:100,cls:'m-accent',col:'var(--accent)'},
+    {lbl:'Desembolsado',val:fmtK(totalDes),sub:pct+'% ejecutado',pct:pct,cls:'m-green',col:'var(--green)'},
+    {lbl:'En Espera',val:fmtK(proxMonto),sub:enEspera.length+' pagos pendientes',pct:totalInv>0?Math.round(proxMonto/totalInv*100):0,cls:'m-amber',col:'var(--amber)'},
+    {lbl:'Obra Completada',val:obraComp+' / '+desData.length,sub:'desembolsos con obra OK',pct:desData.length>0?Math.round(obraComp/desData.length*100):0,cls:'m-purple',col:'var(--jj)'},
+    {lbl:'Fecha Finalización',val:fechaFin,sub:'Cierre programa',pct:75,cls:'m-green',col:'var(--green)'}
   ];
   document.getElementById('metrics-row').innerHTML = ms.map(function(m) {
     return '<div class="metric '+m.cls+'"><div class="metric-lbl">'+m.lbl+'</div><div class="metric-val">'+m.val+'</div><div class="metric-sub">'+m.sub+'</div><div class="metric-bar"><div class="metric-bar-fill" style="width:'+m.pct+'%;background:'+m.col+'"></div></div></div>';
@@ -503,8 +526,8 @@ function renderMetrics() {
 }
 
 function renderProgBars() {
-  var totalInv = PROYECTOS.reduce(function(s,p){return s+p.t;},0);
-  var totalDes = desData.filter(function(d){return d.estadoPago==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
+  var totalInv = metaDes.invAprobada > 0 ? metaDes.invAprobada : desData.reduce(function(s,d){return s+d.monto;},0);
+  var totalDes = desData.filter(function(d){return d.estadoPago && d.estadoPago.trim()==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
   var obraComp = desData.filter(function(d){return d.avanceObra==='Completado';}).length;
   var pctFin = totalInv>0 ? Math.round(totalDes/totalInv*100) : 0;
   var pctObra = desData.length>0 ? Math.round(obraComp/desData.length*100) : 0;
@@ -547,12 +570,13 @@ function renderDesembolsos() {
   var h = '', lastSprint = '';
   desData.forEach(function(d,i) {
     if (d.sprint !== lastSprint) {
-      h += '<tr class="sprint-sep"><td colspan="7">── '+d.sprint+'</td></tr>';
+      h += '<tr class="sprint-sep"><td colspan="8">── '+d.sprint+'</td></tr>';
       lastSprint = d.sprint;
     }
     var ob = badgeObra(d.avanceObra);
     var oH = ob ? '<span class="badge b-'+ob+'">'+d.avanceObra+'</span>' : '<span style="font-size:.62rem;color:var(--text3)">—</span>';
-    h += '<tr><td><span class="ptag '+ptag(d.proyecto)+'">'+d.proyecto+'</span></td><td class="tp" style="max-width:200px;white-space:normal">'+d.desc+'</td><td class="mono" style="font-size:.65rem;color:var(--text3)">'+fmtDate(d.fecha)+'</td><td class="tr mono tp" style="font-weight:600">'+fmtUSD(d.monto)+'</td><td><span class="badge b-'+badgePago(d.estadoPago)+'">'+d.estadoPago+'</span></td><td>'+oH+'</td><td style="font-size:.65rem;color:var(--text3)">'+d.sprint+'</td></tr>';
+    var varH = d.variacion ? '<span style="font-size:.62rem;color:'+(d.variacion>0?'var(--red)':'var(--green)')+';">'+(d.variacion>0?'+':'')+fmtUSD(d.variacion)+'</span>' : '—';
+    h += '<tr><td><span class="ptag '+ptag(d.proyecto)+'">'+d.proyecto+'</span></td><td class="tp" style="max-width:170px;white-space:normal">'+d.desc+'</td><td class="mono" style="font-size:.65rem;color:var(--text3)">'+fmtDate(d.fecha)+'</td><td class="tr mono tp" style="font-weight:600">'+fmtUSD(d.monto)+'</td><td>'+varH+'</td><td><span class="badge b-'+badgePago(d.estadoPago)+'">'+d.estadoPago+'</span></td><td>'+oH+'</td><td style="font-size:.65rem;color:var(--text3)">'+d.sprint+'</td></tr>';
   });
   document.getElementById('tbl-des').innerHTML = h;
   document.getElementById('notas-cnt').textContent = desData.length + ' registros';
@@ -656,8 +680,8 @@ function renderAcciones() {
 }
 
 function renderFinSummary() {
-  var totalInv = PROYECTOS.reduce(function(s,p){return s+p.t;},0);
-  var totalDes = desData.filter(function(d){return d.estadoPago==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
+  var totalInv = metaDes.invAprobada > 0 ? metaDes.invAprobada : desData.reduce(function(s,d){return s+d.monto;},0);
+  var totalDes = desData.filter(function(d){return d.estadoPago && d.estadoPago.trim()==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
   var pendiente = totalInv - totalDes;
   var obraComp = desData.filter(function(d){return d.avanceObra==='Completado';}).length;
   document.getElementById('fin-summary').innerHTML =
