@@ -410,12 +410,21 @@ function fmtD(d) {
   catch(e) { return d; }
 }
 function badgePago(e) {
-  var m={'Aprobado':'aprobado','En espera':'en-espera','En curso':'en-curso','Sin iniciar':'sin-iniciar','Rechazado':'rechazado'};
-  return m[(e||'').trim()]||'sin-iniciar';
+  var s=(e||'').toLowerCase().trim();
+  if(s==='aprobado') return 'aprobado';
+  if(s==='en espera') return 'en-espera';
+  if(s==='en curso') return 'en-curso';
+  if(s==='sin iniciar') return 'sin-iniciar';
+  if(s==='rechazado'||s==='atrasado') return 'rechazado';
+  return 'sin-iniciar';
 }
 function badgeObra(e) {
-  var m={'Completado':'completado','En curso':'en-curso','Sin iniciar':'sin-iniciar','Sin Iniciar':'sin-iniciar','Necesita Revisión':'necesita-revision','Necesita revisión':'necesita-revision'};
-  return m[(e||'').trim()]||null;
+  var s=(e||'').toLowerCase().trim();
+  if(s==='completado') return 'completado';
+  if(s==='en curso') return 'en-curso';
+  if(s==='sin iniciar') return 'sin-iniciar';
+  if(s.includes('revisi')) return 'necesita-revision';
+  return s ? 'sin-iniciar' : null;
 }
 function badgeCron(e) {
   var m={'Completado':'completado','En curso':'en-curso','En espera':'en-espera','Sin iniciar':'sin-iniciar','En proceso':'en-proceso','Necesita revisión':'necesita-revision','Atrasado':'rechazado'};
@@ -504,10 +513,13 @@ function parseDes(text) {
       desc:       r[2]||'',
       fecha:      r[3]||'',
       monto:      cleanNum(r[4]),
-      estadoPago: (r[5]||'').trim(),
+      variacion:  cleanNum(r[5]),
+      estadoPago: (r[6]||'').replace(/\s+/g,' ').trim(),
+      responsable:r[7]||'',
       sprint:     r[8]||'',
       obs:        r[9]||'',
-      avanceObra: (r[10]||'').trim(),
+      avanceObra: (r[10]||'').replace(/\s+/g,' ').trim(),
+      comentario: r[11]||'',
     });
   }
 }
@@ -538,9 +550,9 @@ function recalc() {
     });
     if (!proj) return;
     if (d.monto>0) proj.t+=d.monto;
-    if (d.estadoPago==='Aprobado')     proj.ap+=d.monto;
-    if (d.estadoPago==='En espera')    proj.ee+=d.monto;
-    if (d.estadoPago==='Sin iniciar')  proj.si+=d.monto;
+    if (d.estadoPago.toLowerCase()==='aprobado')     proj.ap+=d.monto;
+    if (d.estadoPago.toLowerCase()==='en espera')    proj.ee+=d.monto;
+    if (d.estadoPago.toLowerCase()==='sin iniciar')  proj.si+=d.monto;
   });
 }
 
@@ -565,10 +577,10 @@ function renderAll() {
 
 // ── METRICS ──
 function renderMetrics() {
-  var totalAp = desData.filter(function(d){return d.estadoPago==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
-  var totalEE = desData.filter(function(d){return d.estadoPago==='En espera';}).reduce(function(s,d){return s+d.monto;},0);
+  var totalAp = desData.filter(function(d){return d.estadoPago.toLowerCase()==='aprobado';}).reduce(function(s,d){return s+d.monto;},0);
+  var totalEE = desData.filter(function(d){return d.estadoPago.toLowerCase()==='en espera';}).reduce(function(s,d){return s+d.monto;},0);
   var totalT  = desData.reduce(function(s,d){return s+d.monto;},0);
-  var obraComp= desData.filter(function(d){return d.avanceObra==='Completado';}).length;
+  var obraComp= desData.filter(function(d){return d.avanceObra.toLowerCase()==='completado';}).length;
   var pctAp   = INV_APROBADA>0?Math.round(totalAp/INV_APROBADA*100):0;
 
   document.getElementById('exec-meta').innerHTML =
@@ -578,7 +590,7 @@ function renderMetrics() {
     {lbl:'Inversión Aprobada',val:fmt(INV_APROBADA),sub:'Presupuesto oficial',pct:100,col:'var(--accent)'},
     {lbl:'% Ejecutado',val:pctAp+'%',sub:fmtF(totalAp)+' desembolsado',pct:pctAp,col:'var(--green)'},
     {lbl:'Desembolsado',val:fmt(totalAp),sub:'Estado: Aprobado',pct:pctAp,col:'var(--green)'},
-    {lbl:'En Espera',val:fmt(totalEE),sub:desData.filter(function(d){return d.estadoPago==='En espera';}).length+' pagos pendientes',pct:Math.round(totalEE/INV_APROBADA*100),col:'var(--amber)'},
+    {lbl:'En Espera',val:fmt(totalEE),sub:desData.filter(function(d){return d.estadoPago.toLowerCase()==='en espera';}).length+' pagos pendientes',pct:Math.round(totalEE/INV_APROBADA*100),col:'var(--amber)'},
     {lbl:'Obra Completada',val:obraComp+' / '+desData.length,sub:'desembolsos con obra OK',pct:desData.length>0?Math.round(obraComp/desData.length*100):0,col:'var(--jj)'},
   ];
 
@@ -589,9 +601,9 @@ function renderMetrics() {
 
 // ── EXEC GRID ──
 function renderExecGrid() {
-  var totalAp  = desData.filter(function(d){return d.estadoPago==='Aprobado';}).reduce(function(s,d){return s+d.monto;},0);
-  var totalEE  = desData.filter(function(d){return d.estadoPago==='En espera';}).reduce(function(s,d){return s+d.monto;},0);
-  var totalSI  = desData.filter(function(d){return d.estadoPago==='Sin iniciar';}).reduce(function(s,d){return s+d.monto;},0);
+  var totalAp  = desData.filter(function(d){return d.estadoPago.toLowerCase()==='aprobado';}).reduce(function(s,d){return s+d.monto;},0);
+  var totalEE  = desData.filter(function(d){return d.estadoPago.toLowerCase()==='en espera';}).reduce(function(s,d){return s+d.monto;},0);
+  var totalSI  = desData.filter(function(d){return d.estadoPago.toLowerCase()==='sin iniciar';}).reduce(function(s,d){return s+d.monto;},0);
   var pctAp    = INV_APROBADA>0?(totalAp/INV_APROBADA*100).toFixed(1):0;
   var pctEE    = INV_APROBADA>0?(totalEE/INV_APROBADA*100).toFixed(1):0;
   var pctSI    = INV_APROBADA>0?(totalSI/INV_APROBADA*100).toFixed(1):0;
@@ -616,9 +628,11 @@ function renderProgBars() {
 function renderObra() {
   var c={'Completado':0,'En curso':0,'Sin iniciar':0,'Necesita Revisión':0};
   desData.forEach(function(d){
-    var k=d.avanceObra||'Sin iniciar';
-    if (k==='Sin Iniciar') k='Sin iniciar';
-    if (k==='Necesita revisión') k='Necesita Revisión';
+    var kraw=(d.avanceObra||'').toLowerCase().trim();
+    var k='Sin iniciar';
+    if(kraw==='completado') k='Completado';
+    else if(kraw==='en curso') k='En curso';
+    else if(kraw.includes('revisi')) k='Necesita Revisión';
     if (c[k]!==undefined) c[k]++; else c['Sin iniciar']++;
   });
   var items=[
@@ -721,8 +735,8 @@ function renderDesTlChart() {
     var f=d.fecha.slice(0,7);
     var mk=monthKeys[f];
     if (!mk) return;
-    if (d.estadoPago==='Aprobado') monthly[mk].ap+=d.monto;
-    else if (d.estadoPago==='En espera') monthly[mk].ee+=d.monto;
+    if (d.estadoPago.toLowerCase()==='aprobado') monthly[mk].ap+=d.monto;
+    else if (d.estadoPago.toLowerCase()==='en espera') monthly[mk].ee+=d.monto;
     else monthly[mk].si+=d.monto;
   });
 
