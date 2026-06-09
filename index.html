@@ -19,7 +19,7 @@
   --social:#e06090;--staff:#3d7aff;--sps:#e84040;--rogue:#6a7a9a;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html{font-size:14px}
+html{font-size:15px}
 body{font-family:'Instrument Sans',sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
 ::-webkit-scrollbar{width:3px;height:3px}::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 
@@ -406,8 +406,19 @@ function fmt(n,dec) {
 function fmtF(n) { return '$'+Math.abs(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}); }
 function fmtD(d) {
   if (!d) return '';
-  try { var dt = new Date(d+'T12:00:00'); return dt.toLocaleDateString('es-HN',{day:'numeric',month:'short'}); }
-  catch(e) { return d; }
+  try {
+    var dt;
+    if (d.indexOf('/')>-1) {
+      var p=d.split('/');
+      var yr=p[2]&&p[2].length===2?'20'+p[2]:(p[2]||'2026');
+      var mo=p[0].length===1?'0'+p[0]:p[0];
+      var dy=p[1].length===1?'0'+p[1]:p[1];
+      dt=new Date(yr+'-'+mo+'-'+dy+'T12:00:00');
+    } else {
+      dt=new Date(d+'T12:00:00');
+    }
+    return isNaN(dt)?d:dt.toLocaleDateString('es-HN',{day:'numeric',month:'short'});
+  } catch(e){return d;}
 }
 function badgePago(e) {
   var s=(e||'').toLowerCase().trim();
@@ -758,7 +769,20 @@ function renderDesTlChart() {
       interaction:{mode:'index',intersect:false},
       plugins:{
         legend:{labels:{color:'#8590a6',font:{size:11,family:'Instrument Sans'},boxWidth:10,boxHeight:10,padding:14}},
-        tooltip:{callbacks:{label:function(c){return ' '+c.dataset.label+': '+fmtF(c.parsed.y);}}}
+        tooltip:{callbacks:{
+            label:function(c){return ' '+c.dataset.label+': '+fmtF(c.parsed.y);},
+            afterBody:function(items){
+              if(!items[0]) return [];
+              var mk=items[0].label;
+              var m=monthly[mk];
+              if(!m||!m.byProj||Object.keys(m.byProj).length===0) return [];
+              var lines=['',' Desglose aprobado:'];
+              Object.keys(m.byProj).sort().forEach(function(p){
+                lines.push('  '+p+': '+fmtF(m.byProj[p]));
+              });
+              return lines;
+            }
+          }}
       },
       scales:{
         x:{ticks:{color:'#42506a',font:{size:11}},grid:{color:'rgba(255,255,255,0.03)'}},
