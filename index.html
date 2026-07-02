@@ -602,7 +602,7 @@ function renderMetrics() {
     {lbl:'Total Aprobado',val:fmt(INV_APROBADA),sub:'Incl. variaciones',pct:100,col:'var(--accent)'},
     {lbl:'% Ejecutado',val:pctAp+'%',sub:fmtF(totalAp)+' desembolsado',pct:pctAp,col:'var(--green)'},
     {lbl:'Desembolsado',val:fmt(totalAp),sub:'Estado: Aprobado',pct:pctAp,col:'var(--green)'},
-    {lbl:'En Espera',val:fmt(totalEE),sub:desData.filter(function(d){return d.estadoPago.toLowerCase()==='en espera';}).length+' pagos pendientes',pct:Math.round(totalEE/INV_APROBADA*100),col:'var(--amber)'},
+    {lbl:'Pendiente Total',val:fmt(INV_APROBADA - totalAp),sub:'Todo lo que falta pagar',pct:Math.round((INV_APROBADA-totalAp)/INV_APROBADA*100),col:'var(--amber)'},
     {lbl:'Obra Completada',val:obraComp+' / '+desData.length,sub:'desembolsos con obra OK',pct:desData.length>0?Math.round(obraComp/desData.length*100):0,col:'var(--jj)'},
   ];
 
