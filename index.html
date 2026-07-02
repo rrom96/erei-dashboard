@@ -368,7 +368,8 @@ var URL_DES  = BASE + '?gid=978839474&single=true&output=csv';
 var URL_CRON = BASE + '?gid=1042743360&single=true&output=csv';
 
 var desData = [], cronData = [];
-var INV_APROBADA = 315683;
+var INV_APROBADA = 320956.70; // Total aprobado actual (con variaciones)
+var INV_INICIAL   = 315683.00;  // Presupuesto inicial del proyecto
 var TODAY = new Date('2026-05-25T12:00:00');
 
 var PROYECTOS = [
@@ -382,6 +383,7 @@ var PROYECTOS = [
 ];
 
 // Variaciones presupuestales conocidas
+// INV_INICIAL=$315,683 / INV_APROBADA=$320,956.70 / Delta=+$7,061.16 por JUJUTSU
 var VARIACIONES = [
   {proyecto:'JUJUTSU', desc:'Incremento Tatami + Shipping (ValenteBrothers)', original:54465.00, nuevo:61526.00, delta:7061.00, nota:'Aumento en materiales para clases Self Defense HN'},
 ];
@@ -594,10 +596,10 @@ function renderMetrics() {
   var pctAp   = INV_APROBADA>0?Math.round(totalAp/INV_APROBADA*100):0;
 
   document.getElementById('exec-meta').innerHTML =
-    'Inversión Aprobada: '+fmtF(INV_APROBADA)+'<br>Filtro Total: '+fmtF(totalT);
+    'Total Aprobado: '+fmtF(INV_APROBADA)+'<br>Presupuesto Inicial: '+fmtF(INV_INICIAL);
 
   var ms = [
-    {lbl:'Inversión Aprobada',val:fmt(INV_APROBADA),sub:'Presupuesto oficial',pct:100,col:'var(--accent)'},
+    {lbl:'Total Aprobado',val:fmt(INV_APROBADA),sub:'Incl. variaciones',pct:100,col:'var(--accent)'},
     {lbl:'% Ejecutado',val:pctAp+'%',sub:fmtF(totalAp)+' desembolsado',pct:pctAp,col:'var(--green)'},
     {lbl:'Desembolsado',val:fmt(totalAp),sub:'Estado: Aprobado',pct:pctAp,col:'var(--green)'},
     {lbl:'En Espera',val:fmt(totalEE),sub:desData.filter(function(d){return d.estadoPago.toLowerCase()==='en espera';}).length+' pagos pendientes',pct:Math.round(totalEE/INV_APROBADA*100),col:'var(--amber)'},
